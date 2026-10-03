@@ -1,0 +1,53 @@
+name: Build Claybel APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [".github/workflows/build-apk.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upstream CT-221B project
+        uses: actions/checkout@v4
+        with:
+          repository: DFC1990/flutter_label_printer_kit
+          ref: main
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Show tool versions
+        run: |
+          flutter --version
+          java -version
+      - name: Install Flutter dependencies
+        run: flutter pub get
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+      - name: Build release APK
+        working-directory: example
+        run: flutter build apk --release
+      - name: Rename APK
+        run: |
+          mkdir -p artifacts
+          cp example/build/app/outputs/flutter-apk/app-release.apk artifacts/Claybel-CT221B.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claybel-CT221B
+          path: artifacts/Claybel-CT221B.apk
+          if-no-files-found: error
+          retention-days: 30
