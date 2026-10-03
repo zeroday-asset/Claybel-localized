@@ -18,6 +18,22 @@ jobs:
         with:
           repository: DFC1990/flutter_label_printer_kit
           ref: main
+      - name: Fix toast overlay app context and add regression test
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('example/lib/main.dart')
+          s = p.read_text()
+          old = "    return CtToastOverlay(\n      controller: _toast,\n      child: MaterialApp(\n        title: 'flutter_label_printer_kit Example',\n        theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),\n        home: HomePage(printer: _printer, toast: _toast),\n      ),\n    );"
+          new = "    return MaterialApp(\n      title: 'Claybel CT221B',\n      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),\n      builder: (context, child) => CtToastOverlay(\n        controller: _toast,\n        child: child ?? const SizedBox.shrink(),\n      ),\n      home: HomePage(printer: _printer, toast: _toast),\n    );"
+          if s.count(old) != 1:
+              raise SystemExit('Expected upstream app root not found; inspect before patching')
+          p.write_text(s.replace(old, new))
+          t = Path('example/test/app_root_regression_test.dart')
+          t.parent.mkdir(parents=True, exist_ok=True)
+          t.write_text("import 'package:flutter/material.dart';\nimport 'package:flutter_test/flutter_test.dart';\nimport 'package:flutter_label_printer_kit/flutter_label_printer_kit.dart';\nimport 'package:shared_preferences/shared_preferences.dart';\nimport '../lib/main.dart';\n\nvoid main() {\n  testWidgets('app root provides Directionality to toast overlay', (tester) async {\n    SharedPreferences.setMockInitialValues({});\n    await tester.pumpWidget(const MyApp());\n    await tester.pump();\n    expect(tester.takeException(), isNull);\n    expect(find.byType(HomePage), findsOneWidget);\n    expect(Directionality.of(tester.element(find.byType(CtToastOverlay))), TextDirection.ltr);\n    await tester.pumpWidget(const SizedBox.shrink());\n  });\n}\n")
+          
+          PY
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -28,18 +44,17 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Show tool versions
-        run: |
-          flutter --version
-          java -version
       - name: Install Flutter dependencies
         run: flutter pub get
       - name: Install example dependencies
         working-directory: example
         run: flutter pub get
+      - name: Verify app root regression
+        working-directory: example
+        run: flutter test test/app_root_regression_test.dart
       - name: Build release APK
         working-directory: example
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number=2
       - name: Rename APK
         run: |
           mkdir -p artifacts
