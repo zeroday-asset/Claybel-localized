@@ -81,7 +81,7 @@ void main() {
     await tester.pump();
     final expectedX = qr.x, expectedY = qr.y, expectedSize = qr.width;
     await tester.runAsync(() => state.saveDraft());
-    await tester.ensureVisible(find.text('Print this label'));
+    await tester.scrollUntilVisible(find.text('Print this label'), 300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Print this label'));
     await tester.pumpAndSettle();
     final printedQr = printer.printed!.children.whereType<LabelQr>().single;
@@ -94,7 +94,7 @@ void main() {
     expect(state.items.last.x, expectedX); expect(state.items.last.width, expectedSize);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
-    await printer.dispose();
+    await tester.runAsync(() => printer.dispose());
   });
 
   testWidgets('imported image prints at chosen size and survives saved layout', (tester) async {
@@ -132,6 +132,6 @@ void main() {
     expect(restored.gray, imported.gray); expect(restored.width, 80);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
-    await printer.dispose();
+    await tester.runAsync(() => printer.dispose());
   });
 }
