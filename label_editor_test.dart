@@ -82,7 +82,10 @@ void main() {
     final expectedX = qr.x, expectedY = qr.y, expectedSize = qr.width;
     await tester.runAsync(() => state.saveDraft());
     await tester.scrollUntilVisible(find.text('Print this label'), 300, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Print this label'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Print this label'));
+      await state.saveDraft();
+    });
     await tester.pumpAndSettle();
     final printedQr = printer.printed!.children.whereType<LabelQr>().single;
     expect(printedQr.x, expectedX); expect(printedQr.y, expectedY); expect(printedQr.size, expectedSize);
