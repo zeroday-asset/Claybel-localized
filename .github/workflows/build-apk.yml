@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: [".github/workflows/build-apk.yml"]
+    paths: [".github/workflows/build-apk.yml", "*.dart"]
 
 permissions:
   contents: read
@@ -18,6 +18,10 @@ jobs:
         with:
           repository: DFC1990/flutter_label_printer_kit
           ref: main
+      - name: Checkout Claybel editor source
+        uses: actions/checkout@v4
+        with:
+          path: claybel
       - name: Fix toast overlay app context and add regression test
         run: |
           python3 - <<'PY'
@@ -55,6 +59,28 @@ jobs:
           s = s.replace('flutter_label_printer_kit Example', 'Claybel CT221B')
           p.write_text(s)
           PY
+      - name: Install editable label canvas and image import
+        run: |
+          cp claybel/label_editor.dart example/lib/label_editor.dart
+          cp claybel/label_editor_test.dart example/test/label_editor_test.dart
+          cp claybel/qr_renderer.dart lib/src/renderer/qr_renderer.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('example/pubspec.yaml')
+          s = p.read_text().replace('  cupertino_icons:', '  file_selector: ^1.1.0\n  qr: ^3.0.2\n  shared_preferences: ^2.2.2\n  cupertino_icons:')
+          p.write_text(s)
+          p = Path('example/lib/main.dart')
+          s = p.read_text().replace("import 'package:flutter/material.dart';", "import 'package:flutter/material.dart';\nimport 'label_editor.dart';")
+          s = s.replace("            const Text('Quick Actions'", "            FilledButton.icon(\n              icon: const Icon(Icons.edit_outlined),\n              label: const Text('Label editor'),\n              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => LabelEditorPage(printer: printer))),\n            ),\n            const SizedBox(height: 16),\n            const Text('Quick Actions'")
+          if "label: const Text('Label editor')" not in s:
+              raise SystemExit('Expected home editor entry point not found')
+          p.write_text(s)
+          p = Path('lib/src/widgets/label_preview.dart')
+          s = p.read_text().replace('final int byteIndex = (y * widthPx + x) ~/ 8;', 'final int byteIndex = y * ((widthPx + 7) ~/ 8) + x ~/ 8;')
+          s = s.replace('final int bitIndex = 7 - (y * widthPx + x) % 8;', 'final int bitIndex = 7 - x % 8;')
+          s = s.replace('final bool isBlack = (monoBitmap[byteIndex] >> bitIndex) & 1 == 1;', 'final bool isBlack = ((monoBitmap[byteIndex] >> bitIndex) & 1) == 0;')
+          p.write_text(s)
+          PY
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -70,20 +96,25 @@ jobs:
       - name: Install example dependencies
         working-directory: example
         run: flutter pub get
+      - name: Check editor code
+        working-directory: example
+        run: |
+          dart format lib/label_editor.dart test/label_editor_test.dart
+          flutter analyze --no-fatal-infos --no-fatal-warnings lib/label_editor.dart
       - name: Verify app root regression
         working-directory: example
-        run: flutter test test/app_root_regression_test.dart
+        run: flutter test test/app_root_regression_test.dart test/label_editor_test.dart
       - name: Build release APK
         working-directory: example
-        run: flutter build apk --release --build-number=3
+        run: flutter build apk --release --build-number=4
       - name: Rename APK
         run: |
           mkdir -p artifacts
-          cp example/build/app/outputs/flutter-apk/app-release.apk artifacts/Claybel-CT221B-English-v3.apk
+          cp example/build/app/outputs/flutter-apk/app-release.apk artifacts/Claybel-CT221B-Editor-v4.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Claybel-CT221B-English-v3
-          path: artifacts/Claybel-CT221B-English-v3.apk
+          name: Claybel-CT221B-Editor-v4
+          path: artifacts/Claybel-CT221B-Editor-v4.apk
           if-no-files-found: error
           retention-days: 30
