@@ -3,11 +3,21 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_label_printer_kit/flutter_label_printer_kit.dart';
+import 'package:flutter_label_printer_kit/src/transport/unsupported_printer_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/label_editor.dart';
 
+class TestTransport extends UnsupportedPrinterTransport {
+  @override
+  Future<void> disconnect() async {}
+  @override
+  Future<PrinterBluetoothState> getBluetoothState() async => PrinterBluetoothState.enabled;
+  @override
+  Future<PrinterDevice?> getConnectedDevice() async => null;
+}
+
 class CapturePrinter extends CtLabelPrinter {
-  CapturePrinter() : super(config: const CtLabelPrinterConfig(autoConnectEnabled: false));
+  CapturePrinter() : super(config: const CtLabelPrinterConfig(autoConnectEnabled: false), transport: TestTransport());
   LabelDocument? printed;
   @override
   Future<void> printLabel(LabelSource label, {String? description}) async { printed = label.toDocument(); }
@@ -49,11 +59,21 @@ void main() {
     final rect = tester.getRect(find.byKey(const Key('label-canvas')));
     final scale = rect.width / state.paperWidth;
     final center = rect.topLeft + Offset((qr.x + qr.width / 2) * scale, (qr.y + qr.height / 2) * scale);
-    await tester.dragFrom(center, const Offset(-40, 10));
+    final drag = await tester.startGesture(center);
+    await drag.moveBy(const Offset(-20, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(-40, 10));
+    await tester.pump();
+    await drag.up();
     await tester.pump();
     expect(qr.x, lessThan(originalX));
     final oldWidth = qr.width;
-    await tester.drag(find.byKey(const Key('resize-handle')), const Offset(-25, -25));
+    await tester.ensureVisible(find.byKey(const Key('resize-handle')));
+    final resize = await tester.startGesture(tester.getCenter(find.byKey(const Key('resize-handle'))));
+    await resize.moveBy(const Offset(-20, 0));
+    await tester.pump();
+    await resize.moveBy(const Offset(-25, -25));
+    await resize.up();
     await tester.pump();
     expect(qr.width, lessThan(oldWidth));
     // Make this valid for the two-dot QR minimum before printing.

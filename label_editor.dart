@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_label_printer_kit/flutter_label_printer_kit.dart';
 import 'package:flutter_label_printer_kit/src/renderer/qr_renderer.dart';
 import 'package:flutter_label_printer_kit/src/renderer/text_renderer.dart';
@@ -114,6 +115,7 @@ class LabelEditorPageState extends State<LabelEditorPage> {
   int? selectedId;
   int _nextId = 1;
   bool _loading = true, _busy = false;
+  bool _widthValid = true, _heightValid = true;
   Timer? _saveTimer;
   String? _notice;
   Future<void> _saveQueue = Future<void>.value();
@@ -200,6 +202,7 @@ class LabelEditorPageState extends State<LabelEditorPage> {
   }
 
   String? get validationError {
+    if (!_widthValid || !_heightValid) return 'Enter a width of 10–80 mm and a height of 10–150 mm.';
     if (items.isEmpty || document.children.isEmpty) return 'Add text, a QR code, or an image to print.';
     for (final item in items) {
       if (item.kind == 'text' && item.content.isEmpty) continue;
@@ -318,13 +321,13 @@ class LabelEditorPageState extends State<LabelEditorPage> {
               decoration: const InputDecoration(labelText: 'Label width (mm)'),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               enabled: !_busy, onChanged: (s) { final v = double.tryParse(s);
-                if (v != null && v >= 10 && v <= 80) changed(() => widthMm = v); })),
+                changed(() { _widthValid = v != null && v.isFinite && v >= 10 && v <= 80; if (_widthValid) widthMm = v!; }); })),
             const SizedBox(width: 12),
             Expanded(child: TextFormField(key: const Key('paper-height'), initialValue: '$heightMm',
               decoration: const InputDecoration(labelText: 'Label height (mm)'),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               enabled: !_busy, onChanged: (s) { final v = double.tryParse(s);
-                if (v != null && v >= 10 && v <= 150) changed(() => heightMm = v); })),
+                changed(() { _heightValid = v != null && v.isFinite && v >= 10 && v <= 150; if (_heightValid) heightMm = v!; }); })),
           ]),
           const SizedBox(height: 12),
           const Text('Tap an item to select it. Drag it to move. Use the corner handle or size slider to resize.'),
@@ -335,8 +338,9 @@ class LabelEditorPageState extends State<LabelEditorPage> {
               child: Stack(children: [
                 Positioned.fill(child: GestureDetector(key: const Key('label-canvas'),
                   behavior: HitTestBehavior.opaque,
+                  dragStartBehavior: DragStartBehavior.down,
+                  onPanDown: _busy ? null : (d) => _selectAt(d.localPosition / scale),
                   onTapDown: _busy ? null : (d) => _selectAt(d.localPosition / scale),
-                  onPanStart: _busy ? null : (d) => _selectAt(d.localPosition / scale),
                   onPanUpdate: _busy ? null : (d) {
                     final target = selected;
                     if (target != null) changed(() { target.x += d.delta.dx / scale; target.y += d.delta.dy / scale; });
@@ -347,6 +351,7 @@ class LabelEditorPageState extends State<LabelEditorPage> {
                   top: ((item.bounds.bottom * scale) - 16).clamp(0, math.max(0, paperHeight * scale - 32)),
                   width: 32, height: 32,
                   child: GestureDetector(key: const Key('resize-handle'), behavior: HitTestBehavior.opaque,
+                    dragStartBehavior: DragStartBehavior.down,
                     onPanUpdate: _busy ? null : (d) => changed(() {
                       item.width += d.delta.dx / scale;
                       if (item.kind == 'text') item.fontSize = (item.fontSize + d.delta.dy / scale * .2).clamp(8, 96);
